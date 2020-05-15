@@ -28,6 +28,7 @@ const
 <body id="body">
 <div id="ROOT" />
 <script type="text/javascript" src="$1.js"></script>
+$3
 </body>
 </html>
 """
@@ -36,11 +37,11 @@ proc exec(cmd: string) =
   if os.execShellCmd(cmd) != 0:
     quit "External command failed: " & cmd
 
-proc build(name: string, rest: string, selectedCss: string, run: bool) =
+proc build(name: string, rest: string, selectedCss: string, outerHtml: string, run: bool) =
   echo("Building...")
   exec("nim js --out:" & name & ".js " & rest)
   let dest = name & ".html"
-  writeFile(dest, html % [name, selectedCss])
+  writeFile(dest, html % [name, selectedCss, outerHtml])
   if run: openDefaultBrowser(dest)
 
 proc main =
@@ -49,6 +50,7 @@ proc main =
   var file = ""
   var run = false
   var selectedCss = ""
+  var outerHtml = ""
   var watch = false
   var files: Table[string, Time] = {"path": getLastModificationTime(".")}.toTable
 
@@ -69,6 +71,12 @@ proc main =
         else:
           selectedCss &= fmt"<link rel='stylesheet' href='{op.val}'></link>"
           rest = rest.replace(re"--href:(\w+).css ")
+      of "outerHtml":
+        if op.val == "":
+          discard
+        else:
+          outerHtml &= fmt"{op.val}"
+          rest = rest.replace(re"--outerHtml:(.*) ")
       else: discard
     of cmdShortOption:
       if op.key == "r":
@@ -82,7 +90,7 @@ proc main =
 
   if file.len == 0: quit "filename expected"
   let name = file.splitFile.name
-  build(name, rest, selectedCss, run)
+  build(name, rest, selectedCss, outerHtml, run)
   if watch:
     # TODO: launch http server
     while true:
@@ -93,7 +101,7 @@ proc main =
         if files.hasKey(path):
           if files[path] != getLastModificationTime(path):
             echo("File changed: " & path)
-            build(name, rest, selectedCss, run)
+            build(name, rest, selectedCss, outerHtml, run)
             files[path] = getLastModificationTime(path)
         else:
           files[path] = getLastModificationTime(path)
