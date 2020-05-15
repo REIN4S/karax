@@ -2,7 +2,9 @@
 ## required to run a Karax app and opens it in a browser.
 
 import os, 
+  re,
   strutils, 
+  strformat,
   parseopt, 
   browsers, 
   times, 
@@ -61,6 +63,12 @@ proc main =
       of "css":
         selectedCss = css
         rest = rest.replace("--css ")
+      of "href":
+        if op.val == "":
+          discard
+        else:
+          selectedCss &= fmt"<link rel='stylesheet' href='{op.val}'></link>"
+          rest = rest.replace(re"--href:(\w+).css ")
       else: discard
     of cmdShortOption:
       if op.key == "r":
