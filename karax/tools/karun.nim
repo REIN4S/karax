@@ -37,12 +37,25 @@ proc exec(cmd: string) =
   if os.execShellCmd(cmd) != 0:
     quit "External command failed: " & cmd
 
-proc build(name: string, rest: string, selectedCss: string, outerHtml: string, run: bool) =
+proc build(name: string, rest: string, selectedCss: string, writeHtml: string, run: bool) =
   echo("Building...")
-  exec("nim js --out:" & name & ".js " & rest)
-  let dest = name & ".html"
-  writeFile(dest, html % [name, selectedCss, outerHtml])
-  if run: openDefaultBrowser(dest)
+  var dest: string
+  if rest.contains(re"--out:"):
+    echo ("CONFIGURED OUTPUT...")
+    exec("nim js " & rest)
+    let pos1 = rest.findBounds(re"--out:\S+ ")
+    let outParam = rest[pos1.first .. pos1.last]
+    let pos2 = outParam.findBounds(re":\S+\.")
+    dest = outParam[pos2.first+1 .. pos2.last-1] & ".html"
+    writeFile(dest, html % [name, selectedCss, writeHtml])
+    let path = getCurrentDir()
+    if run: openDefaultBrowser(path & dest)
+  else:
+    echo("DEFAULT OUTPUT...")
+    exec("nim js --out:" & name & ".js " & rest)
+    let dest = name & ".html"
+    writeFile(dest, html % [name, selectedCss, writeHtml])
+    if run: openDefaultBrowser(dest)
 
 proc main =
   var op = initOptParser()
@@ -50,7 +63,7 @@ proc main =
   var file = ""
   var run = false
   var selectedCss = ""
-  var outerHtml = ""
+  var writeHtml = ""
   var watch = false
   var files: Table[string, Time] = {"path": getLastModificationTime(".")}.toTable
 
@@ -70,13 +83,13 @@ proc main =
           discard
         else:
           selectedCss &= fmt"<link rel='stylesheet' href='{op.val}'></link>"
-          rest = rest.replace(re"--href:(\w+).css ")
-      of "outerHtml":
+          rest = rest.replace(re"--href:\S+ ")
+      of "writeHtml":
         if op.val == "":
           discard
         else:
-          outerHtml &= fmt"{op.val}"
-          rest = rest.replace(re"--outerHtml:(.*) ")
+          writeHtml &= fmt"{op.val}"
+          rest = rest.replace(re"--writeHtml:(.*) ")
       else: discard
     of cmdShortOption:
       if op.key == "r":
@@ -90,7 +103,7 @@ proc main =
 
   if file.len == 0: quit "filename expected"
   let name = file.splitFile.name
-  build(name, rest, selectedCss, outerHtml, run)
+  build(name, rest, selectedCss, writeHtml, run)
   if watch:
     # TODO: launch http server
     while true:
@@ -101,7 +114,7 @@ proc main =
         if files.hasKey(path):
           if files[path] != getLastModificationTime(path):
             echo("File changed: " & path)
-            build(name, rest, selectedCss, outerHtml, run)
+            build(name, rest, selectedCss, writeHtml, run)
             files[path] = getLastModificationTime(path)
         else:
           files[path] = getLastModificationTime(path)
